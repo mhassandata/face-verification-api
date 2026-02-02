@@ -91,6 +91,7 @@ class FaceAnalysisService:
         
         # 1b. PREPROCESS IMAGE FOR BETTER MATCHING (can improve scores by 10-20%)
         img_processed = self.preprocess_for_matching(img)
+        detection_img = img_processed  # Track which image provided the face
 
         # 2. InsightFace Pipeline (Detection -> Alignment -> Embedding)
         faces = self.app.get(img_processed)
@@ -102,17 +103,23 @@ class FaceAnalysisService:
             # Try 1: Enhance contrast
             img_enhanced = cv2.convertScaleAbs(img, alpha=1.5, beta=30)
             faces = self.app.get(img_enhanced)
+            if faces:
+                detection_img = img_enhanced
             
             # Try 2: Denoise the image
             if not faces:
                 img_denoised = cv2.fastNlMeansDenoisingColored(img, None, 10, 10, 7, 21)
                 faces = self.app.get(img_denoised)
+                if faces:
+                    detection_img = img_denoised
             
             # Try 3: Try with smaller detection size (better for small faces)
             if not faces:
                 # Temporarily change detection size
                 self.app.prepare(ctx_id=0, det_size=(320, 320), det_thresh=0.25)
                 faces = self.app.get(img)
+                if faces:
+                    detection_img = img  # Logic detected on original image
                 # Restore original detection size
                 self.app.prepare(ctx_id=0, det_size=(640, 640), det_thresh=0.3)
             
@@ -133,7 +140,7 @@ class FaceAnalysisService:
         largest_face = max(faces, key=lambda f: (f.bbox[2] - f.bbox[0]) * (f.bbox[3] - f.bbox[1]))
         
         # 3b. Assess face quality
-        quality = self.assess_face_quality(largest_face, img.shape)
+        quality = self.assess_face_quality(largest_face, detection_img.shape)
         
         # 4. PROPER FACE ALIGNMENT using facial landmarks (CRITICAL for accuracy!)
         # ========================================================================
@@ -143,13 +150,16 @@ class FaceAnalysisService:
         # - Without alignment: Tilted head = different features = low score
         # - With alignment: Face is warped so eyes are ALWAYS horizontal and centered
         # - This is what professional face recognition systems use
+        #
+        # FIX: Use detection_img (the image where faces were detected) for cropping
+        # to ensures coordinates match the image dimensions.
         
         # Check if face has landmarks (keypoints)
         if hasattr(largest_face, 'kps') and largest_face.kps is not None:
             # Use InsightFace's built-in norm_crop for proper affine alignment
             # This warps the face using the 5 facial landmarks (2 eyes, nose, 2 mouth corners)
             # to a canonical pose where eyes are horizontal and centered
-            aligned_face = face_align.norm_crop(img, landmark=largest_face.kps)
+            aligned_face = face_align.norm_crop(detection_img, landmark=largest_face.kps)
             
             # norm_crop returns 112x112 by default (ArcFace standard)
             # DO NOT resize this - the model expects 112x112 aligned faces
@@ -168,7 +178,7 @@ class FaceAnalysisService:
             pad_y = int(face_height * 0.2)
             
             # Get dimensions
-            img_h, img_w = img.shape[:2]
+            img_h, img_w = detection_img.shape[:2]
             
             # Apply padding with boundary checks
             x1_padded = max(0, x1 - pad_x)
@@ -177,13 +187,12 @@ class FaceAnalysisService:
             y2_padded = min(img_h, y2 + pad_y)
             
             # Crop and resize to 112x112
-            cropped = img[y1_padded:y2_padded, x1_padded:x2_padded]
+            cropped = detection_img[y1_padded:y2_padded, x1_padded:x2_padded]
             if cropped.size > 0:
                 aligned_face = cv2.resize(cropped, (112, 112), interpolation=cv2.INTER_LANCZOS4)
             else:
                 # Last resort: use original bbox
-                cropped = img[y1:y2, x1:x2]
-                aligned_face = cv2.resize(cropped, (112, 112), interpolation=cv2.INTER_LANCZOS4)
+                aligned_face = cv2.resize(detection_img[y1:y2, x1:x2], (112, 112), interpolation=cv2.INTER_LANCZOS4)
         
         # 5. Save the aligned face for audit/debugging
         # Generate timestamp-based filename
@@ -234,10 +243,16 @@ class FaceAnalysisService:
             # SCENARIO 1: Quality Disparity (CNIC vs Selfie) - MOST IMPORTANT
             # If one image is much better quality than the other
             if quality_diff > 0.15:  # Significant quality difference
+                # Determine which is likely the CNIC (Higher Quality)
+                high_quality_idx = 1 if q1_score > q2_score else 2
+                high_q_val = max(q1_score, q2_score)
+                low_q_val = min(q1_score, q2_score)
+                
                 print(f"  ⚠️  Quality disparity detected: {q1_score:.2f} vs {q2_score:.2f}")
+                print(f"  ℹ️  Dynamic Role Detection: Image {high_quality_idx} looks like the CNIC/Reference (Score: {high_q_val:.2f})")
                 
                 # If at least one image is decent quality (likely the CNIC)
-                if max(q1_score, q2_score) > 0.6:
+                if high_q_val > 0.6:
                     # Apply aggressive boost (up to 35% for same person)
                     # This compensates for the model's bias towards similar-quality images
                     boost_factor = 1.0 + (avg_quality * 0.7)  # Max 35% boost
@@ -255,6 +270,28 @@ class FaceAnalysisService:
                 return boosted_score
         
         return base_score
+
+    def calculate_pearson_similarity(self, emb1, emb2) -> float:
+        """
+        Calculates Pearson Correlation Coefficient.
+        Good for detecting linear relationships and ignoring scaling/offsets.
+        """
+        # Pearson correlation: Cov(X,Y) / (std(X)*std(Y))
+        # It is effectively Cosine Similarity of centered vectors
+        
+        # Center the vectors
+        emb1_centered = emb1 - np.mean(emb1)
+        emb2_centered = emb2 - np.mean(emb2)
+        
+        # Compute Cosine of centered vectors
+        norm1 = np.linalg.norm(emb1_centered)
+        norm2 = np.linalg.norm(emb2_centered)
+        
+        if norm1 == 0 or norm2 == 0:
+            return 0.0
+            
+        pearson = np.dot(emb1_centered, emb2_centered) / (norm1 * norm2)
+        return float(np.clip(pearson, 0, 1))
 
     def calculate_euclidean_distance(self, emb1, emb2) -> float:
         """
@@ -310,26 +347,48 @@ class FaceAnalysisService:
         Perform verification using multiple methods and return comprehensive results.
         """
         # Method 1: Cosine Similarity (with quality boosting)
-        cosine_similarity = self.calculate_similarity(emb1, emb2, quality1, quality2)
+        cosine_sim = self.calculate_similarity(emb1, emb2, quality1, quality2)
         
-        # Method 2: Euclidean Distance
-        euclidean_similarity = self.calculate_euclidean_distance(emb1, emb2)
+        # 2. Euclidean Distance (converted to similarity)
+        # Normalize first to ensure consistent distance
+        emb1_norm = emb1 / np.linalg.norm(emb1)
+        emb2_norm = emb2 / np.linalg.norm(emb2)
+        dist = np.linalg.norm(emb1_norm - emb2_norm)
+        # Convert distance (0 to 2) to similarity (1 to 0)
+        euclidean_sim = float(np.clip(1.0 - (dist / 2.0), 0, 1))
         
-        # Method 3: Weighted ensemble score
-        # Give more weight to cosine similarity (it's more reliable for face recognition)
-        ensemble_score = (cosine_similarity * 0.7) + (euclidean_similarity * 0.3)
+        # 3. Pearson Correlation
+        pearson_sim = self.calculate_pearson_similarity(emb1, emb2)
         
-        # Quality-adjusted score (penalize low quality images)
-        avg_quality = (quality1['quality_score'] + quality2['quality_score']) / 2.0
-        quality_adjusted_score = ensemble_score * (0.7 + 0.3 * avg_quality)
+        # 4. Ensemble Score (Weighted Average)
+        # We give higher weight to Cosine as it's the standard for ArcFace
+        # But we now include Pearson for robustness
+        # Old weights: Cosine 0.7, Euclidean 0.3
+        # New weights: Cosine 0.6, Euclidean 0.2, Pearson 0.2
+        ensemble = (cosine_sim * 0.6) + (euclidean_sim * 0.2) + (pearson_sim * 0.2)
+        ensemble = float(np.clip(ensemble, 0, 1))
         
+        # 5. Quality Adjusted Final Score
+        # If we have a very strong ensemble match, we trust it more
+        if ensemble > 0.6:
+            quality_adjusted = ensemble
+        else:
+            # If uncertain, we stick closer to the raw cosine which has the boost logic
+            quality_adjusted = max(ensemble, cosine_sim)
+        
+        # STRATEGY: Use the HIGHEST valid score as the primary score
+        # We trust Cosine (has boost) and Ensemble (robust).
+        # This ensures we don't miss a match if one method works well.
+        final_score = max(ensemble, cosine_sim, pearson_sim)
+
         return {
-            'cosine_similarity': float(cosine_similarity),
-            'euclidean_similarity': float(euclidean_similarity),
-            'ensemble_score': float(ensemble_score),
-            'quality_adjusted_score': float(quality_adjusted_score),
-            'avg_quality': float(avg_quality),
-            'primary_score': float(cosine_similarity)  # Use cosine as primary (most reliable)
+            'cosine_similarity': cosine_sim,
+            'euclidean_similarity': euclidean_sim,
+            'pearson_similarity': pearson_sim,
+            'ensemble_score': ensemble,
+            'primary_score': final_score,  # ✅ Now uses the MAX value
+            'quality_adjusted_score': quality_adjusted,
+            'avg_quality': (quality1['quality_score'] + quality2['quality_score']) / 2 if quality1 and quality2 else 0
         }
 
     def determine_confidence_level(self, score: float, quality1: dict, quality2: dict) -> dict:

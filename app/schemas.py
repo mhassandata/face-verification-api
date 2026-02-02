@@ -18,6 +18,7 @@ class FaceVerificationResponse(BaseModel):
     euclidean_similarity: Optional[float] = Field(None, description="Euclidean distance-based similarity")
     ensemble_score: Optional[float] = Field(None, description="Weighted ensemble of multiple methods")
     quality_adjusted_score: Optional[float] = Field(None, description="Score adjusted for image quality")
+    pearson_similarity: Optional[float] = Field(None, description="Pearson correlation coefficient")
     
     # Quality metrics
     image_quality_1: Optional[Dict] = Field(None, description="Quality assessment for image 1")

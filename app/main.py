@@ -138,6 +138,7 @@ def verify_faces(
         # Multi-method scores
         cosine_similarity=verification_scores['cosine_similarity'],
         euclidean_similarity=verification_scores['euclidean_similarity'],
+        pearson_similarity=verification_scores['pearson_similarity'],
         ensemble_score=verification_scores['ensemble_score'],
         quality_adjusted_score=verification_scores['quality_adjusted_score'],
         

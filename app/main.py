@@ -6,9 +6,20 @@ from app.service import face_service
 from app.schemas import FaceVerificationResponse
 
 app = FastAPI(
-    title="Face Verification API - Enhanced (antelopev2)",
-    description="Robust face verification with ArcFace R100, multi-method verification, and manual review system. Optimized for CNIC vs Selfie matching.",
-    version="2.1.0"
+    title="Face Verification API - Enhanced with Advanced Preprocessing",
+    description="""
+    Robust face verification with ArcFace R100, multi-method verification, and manual review system.
+    
+    **Enhanced Features (v3.0.0):**
+    - 🚀 Advanced preprocessing: Gamma correction, bilateral filtering, aggressive CLAHE
+    - 🎯 Multi-scale sharpening and color normalization
+    - 💪 Aggressive quality compensation (up to 50% boost for CNIC vs Selfie)
+    - 📊 Target similarity scores: 60-70%+ for genuine matches
+    - 🔍 Post-processing enhancement for aligned faces
+    
+    Optimized specifically for CNIC vs Selfie matching scenarios.
+    """,
+    version="3.0.0"
 )
 
 # Validate file types
@@ -22,65 +33,111 @@ def validate_image(file: UploadFile):
         )
 
 @app.post("/verify", response_model=FaceVerificationResponse)
-def verify_faces(
-    source_image: UploadFile = File(...),
-    target_image: UploadFile = File(...)
+async def verify_faces(
+    cnic_image: UploadFile = File(..., description="Upload CNIC/ID card image"),
+    selfie_image: UploadFile = File(..., description="Upload Selfie picture")
 ):
     """
-    Upload two images to verify if they belong to the same person.
+    Compare CNIC and Selfie images to verify identity.
+    Uses multi-method verification (Cosine + Euclidean + Pearson) with quality compensation.
     
-    **Enhanced Features:**
-    - Multi-method verification (Cosine + Euclidean + Ensemble)
-    - Image quality assessment
-    - Confidence level determination
-    - Automatic manual review flagging for edge cases
+    Parameters:
+    - cnic_image: CNIC/ID card photo (typically high quality, professional)
+    - selfie_image: User's selfie photo (typically lower quality, user-submitted)
     
-    **Parameters:**
-    - **source_image**: Reference image (CNIC, ID card, etc.)
-    - **target_image**: Image to verify (Selfie, etc.)
-    
-    **Response includes:**
-    - Primary similarity score (ensemble of multiple methods)
-    - Individual method scores (cosine, euclidean)
-    - Confidence level (HIGH, MEDIUM_HIGH, MEDIUM, LOW_MEDIUM, LOW)
-    - Manual review flag for uncertain cases
-    - Image quality metrics
+    The system automatically detects which image is higher quality and applies
+    appropriate compensation for quality disparity.
     """
     start_time = time.time()
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-
-    # 1. Validation
-    validate_image(source_image)
-    validate_image(target_image)
-
-    # 2. Read Bytes
+    
+    # 1. Validate file types
+    allowed_types = ["image/jpeg", "image/png", "image/webp"]
+    if cnic_image.content_type not in allowed_types:
+        raise HTTPException(status_code=400, detail=f"Invalid file type: {cnic_image.content_type}. Only JPEG/PNG/WebP allowed.")
+    if selfie_image.content_type not in allowed_types:
+        raise HTTPException(status_code=400, detail=f"Invalid file type: {selfie_image.content_type}. Only JPEG/PNG/WebP allowed.")
+    
+    # 2. Read image bytes
     try:
-        source_bytes = source_image.file.read()
-        target_bytes = target_image.file.read()
+        cnic_bytes = await cnic_image.read()
+        selfie_bytes = await selfie_image.read()
     except Exception:
         raise HTTPException(status_code=500, detail="Failed to read image files.")
 
-    # 3. Process Images with Quality Assessment
+    # 3. Get Embeddings and Cropped Faces
+    # Don't raise exceptions - handle gracefully
     try:
-        emb1, count1, quality1 = face_service.get_embedding(source_bytes, image_label="source")
-        emb2, count2, quality2 = face_service.get_embedding(target_bytes, image_label="target")
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-    # 4. Handle "No Face Found" - treat as failed match
-    if emb1 is None or emb2 is None:
-        execution_time = (time.time() - start_time) * 1000
+        emb1, count1, quality1, crop_method1 = face_service.get_embedding(cnic_bytes, "cnic")
+        emb2, count2, quality2, crop_method2 = face_service.get_embedding(selfie_bytes, "selfie")
+    except Exception as e:
+        print(f"⚠️  Error processing images: {e}")
+        # Return graceful error response instead of 400
         return FaceVerificationResponse(
             similarity_score=None,
             is_match=False,
             threshold_used=face_service.SIMILARITY_THRESHOLD,
-            execution_time_ms=round(execution_time, 2),
+            execution_time_ms=0,
+            cosine_similarity=0,
+            euclidean_similarity=0,
+            pearson_similarity=0,
+            ensemble_score=0,
+            quality_adjusted_score=0,
+            image_quality_1=None,
+            image_quality_2=None,
+            average_quality=0,
+            model_info={"name": "buffalo_l", "embedding_size": 512, "detector": "RetinaFace", "recognition": "ArcFace R50"},
+            crop_info={
+                "cnic_method": "error",
+                "selfie_method": "error",
+                "aligned_size": "112x112",
+                "alignment_type": "affine_transform_5_landmarks"
+            },
+            faces_found_image_1=0,
+            faces_found_image_2=0,
             confidence="LOW",
             needs_manual_review=False,
-            review_reason="No face detected in one or both images",
+            review_reason="Image processing error",
+            message=f"Error processing images: {str(e)}. Please ensure images are valid and contain visible faces."
+        )
+    
+    # 4. Check results - Handle no face detected gracefully
+    if emb1 is None or emb2 is None:
+        # Determine which image(s) failed
+        failed_images = []
+        if emb1 is None:
+            failed_images.append("CNIC")
+        if emb2 is None:
+            failed_images.append("Selfie")
+        
+        failed_str = " and ".join(failed_images)
+        
+        return FaceVerificationResponse(
+            similarity_score=None,
+            is_match=False,
+            threshold_used=face_service.SIMILARITY_THRESHOLD,
+            execution_time_ms=(time.time() - start_time) * 1000,
+            cosine_similarity=0,
+            euclidean_similarity=0,
+            pearson_similarity=0,
+            ensemble_score=0,
+            quality_adjusted_score=0,
+            image_quality_1=quality1,
+            image_quality_2=quality2,
+            average_quality=0,
+            model_info={"name": "buffalo_l", "embedding_size": 512, "detector": "RetinaFace", "recognition": "ArcFace R50"},
+            crop_info={
+                "cnic_method": crop_method1 if crop_method1 else "no_face_detected",
+                "selfie_method": crop_method2 if crop_method2 else "no_face_detected",
+                "aligned_size": "112x112",
+                "alignment_type": "affine_transform_5_landmarks"
+            },
             faces_found_image_1=count1,
             faces_found_image_2=count2,
-            message="Your picture is not clear or the faces do not match. Please ensure good lighting and clear visibility."
+            confidence="LOW",
+            needs_manual_review=False,
+            review_reason=f"No face detected in {failed_str} image(s)",
+            message=f"⚠️ No face detected in {failed_str} image(s). The system tried 7 different detection methods including auto-rotation (for sideways/landscape CNIC images) but could not find a face. Please ensure: 1) Face is clearly visible, 2) Good lighting, 3) Face is not too small/distant, 4) Image is not blurry. The system automatically handles rotated images."
         )
 
     # 5. Multi-Method Verification
@@ -97,26 +154,27 @@ def verify_faces(
     # 7. Set appropriate message based on confidence and match result
     if confidence_result['is_match']:
         if confidence_result['confidence'] == 'HIGH':
-            message = "Both pictures you provided are match. High confidence verification."
+            message = "CNIC and Selfie match verified. High confidence."
         else:
-            message = "Both pictures you provided are match."
+            message = "CNIC and Selfie match verified."
     else:
         if confidence_result['needs_review']:
             message = f"Uncertain match - {confidence_result['reason']}. This case has been flagged for manual review."
         else:
-            message = "Your picture is not clear or the faces do not match. Please ensure good lighting and clear visibility."
+            message = "CNIC and Selfie do not match. Please ensure good lighting and clear visibility."
     
     # 8. Save for Manual Review if Needed
     review_path = None
     if confidence_result['needs_review']:
         review_path = face_service.save_for_manual_review(
-            source_bytes, 
-            target_bytes,
+            cnic_bytes, 
+            selfie_bytes,
             {
                 'scores': verification_scores,
                 'confidence': confidence_result,
                 'quality1': quality1,
                 'quality2': quality2,
+                'crop_info': {'cnic': crop_method1, 'selfie': crop_method2},
                 'timestamp': timestamp
             },
             timestamp

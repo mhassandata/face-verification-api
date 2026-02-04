@@ -126,6 +126,48 @@ class FaceAnalysisService:
         # Store original image dimensions
         img_height, img_width = img.shape[:2]
         
+        # 1a. SMART AUTO-ROTATION: Detect and fix landscape orientation BEFORE processing
+        # This is critical for CNIC cards that are scanned/photographed in landscape
+        if img_width > img_height:
+            print(f"⚠️  {image_label} is LANDSCAPE ({img_width}x{img_height})")
+            print(f"   Trying to find correct orientation...")
+            
+            # Try all 4 orientations with quick detection
+            orientations = [
+                (img, "original (landscape)"),
+                (cv2.rotate(img, cv2.ROTATE_90_CLOCKWISE), "90° clockwise"),
+                (cv2.rotate(img, cv2.ROTATE_90_COUNTERCLOCKWISE), "90° counter-clockwise"),
+                (cv2.rotate(img, cv2.ROTATE_180), "180°")
+            ]
+            
+            # Quick detection with lower threshold to find correct orientation
+            self.app.prepare(ctx_id=0, det_size=(640, 640), det_thresh=0.2)
+            
+            best_orientation = None
+            best_face_count = 0
+            best_detection_score = 0
+            
+            for test_img, orientation_name in orientations:
+                test_faces = self.app.get(test_img)
+                if test_faces:
+                    # Pick orientation with most faces or highest detection score
+                    max_score = max([f.det_score for f in test_faces])
+                    if len(test_faces) > best_face_count or (len(test_faces) == best_face_count and max_score > best_detection_score):
+                        best_orientation = test_img
+                        best_face_count = len(test_faces)
+                        best_detection_score = max_score
+                        print(f"   ✓ Found {len(test_faces)} face(s) in {orientation_name} (score: {max_score:.3f})")
+            
+            # Restore normal threshold
+            self.app.prepare(ctx_id=0, det_size=(640, 640), det_thresh=0.3)
+            
+            if best_orientation is not None:
+                img = best_orientation
+                img_height, img_width = img.shape[:2]
+                print(f"   ✅ Auto-rotated {image_label} to correct orientation ({img_width}x{img_height})")
+            else:
+                print(f"   ⚠️  No face found in any orientation, keeping original")
+        
         # 1b. PREPROCESS IMAGE FOR BETTER MATCHING (can improve scores by 10-20%)
         img_processed = self.preprocess_for_matching(img)
         detection_img = img_processed  # Track which image provided the face
@@ -212,28 +254,39 @@ class FaceAnalysisService:
             
             # Try 7: AUTO-ROTATION - Try all 4 orientations (CRITICAL for rotated CNIC/selfies)
             if not faces:
-                print(f"   [7/7] Trying auto-rotation (0°, 90°, 180°, 270°)...")
+                print(f"   [7/7] Trying auto-rotation (0°, 90°, 180°, 270°) with UPSCALING...")
                 print(f"        This handles CNIC images that are landscape/sideways...")
                 
                 # Define rotation angles and their names
                 rotations = [
                     (cv2.ROTATE_90_CLOCKWISE, "90° clockwise"),
-                    (cv2.ROTATE_180, "180°"),
-                    (cv2.ROTATE_90_COUNTERCLOCKWISE, "90° counter-clockwise")
+                    (cv2.ROTATE_90_COUNTERCLOCKWISE, "90° counter-clockwise"),
+                    (cv2.ROTATE_180, "180°")
                 ]
                 
                 for rotation_code, rotation_name in rotations:
                     print(f"        Trying {rotation_name}...")
                     img_rotated = cv2.rotate(img, rotation_code)
                     
-                    # Try with lower threshold for rotated images
-                    self.app.prepare(ctx_id=0, det_size=(640, 640), det_thresh=0.2)
+                    # 1. Try normal rotated detection
+                    self.app.prepare(ctx_id=0, det_size=(640, 640), det_thresh=0.15)
                     faces = self.app.get(img_rotated)
                     
                     if faces:
                         detection_img = img_rotated
                         print(f"   ✓ Face detected after {rotation_name} rotation!")
                         print(f"   ℹ️  Image was rotated - will use corrected orientation")
+                        break
+                        
+                    # 2. If valid rotation but face small, try UPSCALING the rotated image
+                    # (Many landscape CNICs have small faces when rotated)
+                    h, w = img_rotated.shape[:2]
+                    img_rotated_upscaled = cv2.resize(img_rotated, (w*2, h*2), interpolation=cv2.INTER_CUBIC)
+                    faces = self.app.get(img_rotated_upscaled)
+                    
+                    if faces:
+                        detection_img = img_rotated_upscaled
+                        print(f"   ✓ Face detected after {rotation_name} rotation + UPSCALING!")
                         break
                 
                 # Restore original settings
@@ -512,27 +565,40 @@ class FaceAnalysisService:
         ensemble = (cosine_sim * 0.6) + (euclidean_sim * 0.2) + (pearson_sim * 0.2)
         ensemble = float(np.clip(ensemble, 0, 1))
         
-        # 5. Quality Adjusted Final Score
-        # If we have a very strong ensemble match, we trust it more
-        if ensemble > 0.6:
-            quality_adjusted = ensemble
-        else:
-            # If uncertain, we stick closer to the raw cosine which has the boost logic
-            quality_adjusted = max(ensemble, cosine_sim)
+        # 5. DYNAMIC SELECTION: Use the HIGHEST similarity score
+        # This maximizes true positives by selecting the best-performing metric for each case
+        # Some cases work better with cosine, others with euclidean, etc.
+        scores = {
+            'cosine': cosine_sim,
+            'euclidean': euclidean_sim,
+            'pearson': pearson_sim,
+            'ensemble': ensemble
+        }
         
-        # STRATEGY: Use the HIGHEST valid score as the primary score
-        # We trust Cosine (has boost) and Ensemble (robust).
-        # This ensures we don't miss a match if one method works well.
-        final_score = max(ensemble, cosine_sim, pearson_sim)
+        # Find the highest score and which method produced it
+        best_method = max(scores, key=scores.get)
+        final_score = scores[best_method]
+        
+        # Log which method was selected
+        print(f"  📊 Similarity Scores:")
+        print(f"     Cosine:    {cosine_sim:.3f}")
+        print(f"     Euclidean: {euclidean_sim:.3f}")
+        print(f"     Pearson:   {pearson_sim:.3f}")
+        print(f"     Ensemble:  {ensemble:.3f}")
+        print(f"  ✓ Selected: {best_method.upper()} ({final_score:.3f}) as final score")
+        
+        # Quality adjusted score uses the final score
+        quality_adjusted = final_score
 
         return {
             'cosine_similarity': cosine_sim,
             'euclidean_similarity': euclidean_sim,
             'pearson_similarity': pearson_sim,
             'ensemble_score': ensemble,
-            'primary_score': final_score,  # ✅ Now uses the MAX value
+            'primary_score': final_score,  # ✅ Dynamically selected highest score
             'quality_adjusted_score': quality_adjusted,
-            'avg_quality': (quality1['quality_score'] + quality2['quality_score']) / 2 if quality1 and quality2 else 0
+            'avg_quality': (quality1['quality_score'] + quality2['quality_score']) / 2 if quality1 and quality2 else 0,
+            'selected_method': best_method  # NEW: Shows which method was used
         }
 
     def determine_confidence_level(self, score: float, quality1: dict, quality2: dict) -> dict:

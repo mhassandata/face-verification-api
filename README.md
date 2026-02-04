@@ -7,10 +7,12 @@ A production-ready face verification API optimized for CNIC (ID card) vs Selfie 
 ### 🎯 Core Capabilities
 - **Face Detection & Alignment**: 5-point landmark-based alignment for accurate embeddings
 - **Multi-Method Verification**: Cosine similarity, Euclidean distance, and Pearson correlation
+- **🆕 Dynamic Similarity Selection**: Automatically selects the highest score among all methods for maximum accuracy
 - **Quality Compensation**: Automatic boost for CNIC vs Selfie quality disparities (up to 60% boost)
 - **Baseline Enhancement**: 20% baseline boost for all comparisons
 
 ### 🔧 Advanced Detection
+- **🆕 Proactive Landscape Auto-Rotation**: Automatically detects and corrects landscape CNIC orientation BEFORE processing
 - **7-Layer Fallback System**: Handles challenging images with multiple detection strategies
   1. Original image processing
   2. Aggressive contrast enhancement
@@ -25,6 +27,78 @@ A production-ready face verification API optimized for CNIC (ID card) vs Selfie 
 - **Quality Assessment**: Automatic quality scoring and compensation
 - **Manual Review System**: Flags uncertain cases for human review
 - **Graceful Error Handling**: Returns 200 OK with helpful messages instead of errors
+
+## New Features (v3.1.0)
+
+### 🎯 Feature 1: Dynamic Similarity Selection
+
+The system now **intelligently selects the best similarity metric** for each verification:
+
+**How it works:**
+- Calculates 4 different similarity scores:
+  - Cosine similarity (with quality boost)
+  - Euclidean distance
+  - Pearson correlation
+  - Weighted ensemble
+- **Automatically picks the highest score** as the final result
+- Shows which method was selected in the response
+
+**Benefits:**
+- **Maximizes true positive rate** - catches matches that one method might miss
+- **Adapts to different scenarios** - some faces work better with euclidean, others with cosine
+- **Transparent selection** - logs show which method was chosen and why
+
+**Example:**
+```json
+{
+  "similarity_score": 0.353,
+  "selected_method": "euclidean",
+  "cosine_similarity": 0.241,
+  "euclidean_similarity": 0.353,
+  "pearson_similarity": 0.162,
+  "ensemble_score": 0.247
+}
+```
+
+**Console Output:**
+```
+📊 Similarity Scores:
+   Cosine:    0.241
+   Euclidean: 0.353
+   Pearson:   0.162
+   Ensemble:  0.247
+✓ Selected: EUCLIDEAN (0.353) as final score
+```
+
+### 🔄 Feature 2: Proactive Landscape Auto-Rotation
+
+CNIC cards in landscape orientation are now **automatically detected and rotated BEFORE processing**:
+
+**How it works:**
+- Detects if image is landscape (width > height)
+- Tries all 4 orientations (0°, 90°, 180°, 270°)
+- Selects orientation with best face detection
+- Rotates image to correct orientation
+- Proceeds with normal processing
+
+**Benefits:**
+- **Faster processing** - rotation happens upfront, not as last resort
+- **Better accuracy** - face is detected in optimal orientation from the start
+- **Cleaner crops** - saved images are always upright
+- **Higher success rate** - no more failed detections due to wrong orientation
+
+**Example Console Output:**
+```
+⚠️  cnic is LANDSCAPE (1920x1080)
+   Trying to find correct orientation...
+   ✓ Found 1 face(s) in 90° clockwise (score: 0.842)
+   ✅ Auto-rotated cnic to correct orientation (1080x1920)
+✓ Face aligned using landmarks for cnic
+```
+
+**Before vs After:**
+- **Before**: Landscape CNIC → 6 failed attempts → rotation fallback → success (slow)
+- **After**: Landscape CNIC → auto-detect → rotate → immediate success (fast)
 
 ## Quick Start
 
@@ -80,6 +154,7 @@ curl -X POST "http://localhost:8000/verify" \
   "is_match": true,
   "confidence": "HIGH",
   "needs_manual_review": false,
+  "selected_method": "ensemble",
   "cosine_similarity": 0.70,
   "euclidean_similarity": 0.71,
   "pearson_similarity": 0.69,
@@ -221,5 +296,9 @@ For issues or questions, please contact [Your Contact Info]
 
 ---
 
-**Version**: 3.0.0  
-**Last Updated**: 2026-02-03
+**Version**: 3.1.0  
+**Last Updated**: 2026-02-04
+
+**New in v3.1.0:**
+- 🎯 Dynamic Similarity Selection (automatically picks best method)
+- 🔄 Proactive Landscape Auto-Rotation (detects and corrects orientation upfront)

@@ -9,14 +9,6 @@ app = FastAPI(
     title="Face Verification API - Enhanced with Advanced Preprocessing",
     description="""
     Robust face verification with ArcFace R100, multi-method verification, and manual review system.
-    
-    **Enhanced Features (v3.0.0):**
-    - 🚀 Advanced preprocessing: Gamma correction, bilateral filtering, aggressive CLAHE
-    - 🎯 Multi-scale sharpening and color normalization
-    - 💪 Aggressive quality compensation (up to 50% boost for CNIC vs Selfie)
-    - 📊 Target similarity scores: 60-70%+ for genuine matches
-    - 🔍 Post-processing enhancement for aligned faces
-    
     Optimized specifically for CNIC vs Selfie matching scenarios.
     """,
     version="3.0.0"
@@ -199,6 +191,7 @@ async def verify_faces(
         pearson_similarity=verification_scores['pearson_similarity'],
         ensemble_score=verification_scores['ensemble_score'],
         quality_adjusted_score=verification_scores['quality_adjusted_score'],
+        selected_method=verification_scores.get('selected_method', 'unknown'),
         
         # Quality metrics
         image_quality_1=quality1,

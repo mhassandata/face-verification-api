@@ -299,7 +299,7 @@ See `requirements.txt` for complete list.
 
 ## Support
 
-For issues or questions, please contact [Your Contact Info]
+For issues or questions, please contact Muhammad Hassan(muhammad.hassan38)
 
 ---
 

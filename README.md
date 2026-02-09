@@ -50,11 +50,11 @@ The system now **intelligently selects the best similarity metric** for each ver
 **Example:**
 ```json
 {
-  "similarity_score": 0.353,
-  "selected_method": "euclidean",
-  "cosine_similarity": 0.241,
-  "euclidean_similarity": 0.353,
-  "pearson_similarity": 0.162,
+  "similarity_score": 0.7530237980165914,
+  "selected_method": "Cosine",
+  "cosine_similarity": 0.7530237980165914,
+  "euclidean_similarity": 0.5027029514312744,
+  "pearson_similarity": 0.5064654350280762,
 }
 ```
 

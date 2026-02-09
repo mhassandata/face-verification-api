@@ -61,10 +61,10 @@ The system now **intelligently selects the best similarity metric** for each ver
 **Console Output:**
 ```
 📊 Similarity Scores:
-   Cosine:    0.241
-   Euclidean: 0.353
-   Pearson:   0.162
-✓ Selected: EUCLIDEAN (0.353) as final score
+   Cosine:    0.7530237980165914
+   Euclidean: 0.5027029514312744
+   Pearson:   0.5064654350280762
+✓ Selected: COSINE (0.7530237980165914) as final score
 ```
 
 ### 🔄 Feature 2: Proactive Landscape Auto-Rotation

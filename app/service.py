@@ -554,16 +554,16 @@ class FaceAnalysisService:
         """
         avg_quality = (quality1['quality_score'] + quality2['quality_score']) / 2.0
         
-        # High confidence: score well above threshold and good quality
-        if score >= self.SIMILARITY_THRESHOLD_HIGH and avg_quality >= 0.7:
+        # High confidence: score well above threshold with decent quality
+        if score >= 0.60 and avg_quality >= 0.4:
             return {
                 'confidence': 'HIGH',
                 'needs_review': False,
                 'is_match': True,
                 'reason': 'High similarity score with good image quality'
             }
-        
-        # Medium-high confidence: score above threshold
+
+        # Medium-high confidence: score above main threshold
         elif score >= self.SIMILARITY_THRESHOLD:
             return {
                 'confidence': 'MEDIUM_HIGH',
@@ -571,23 +571,14 @@ class FaceAnalysisService:
                 'is_match': True,
                 'reason': 'Score above threshold'
             }
-        
-        # Medium confidence: in the uncertain zone - NEEDS MANUAL REVIEW
+
+        # Medium confidence: uncertain zone - NEEDS MANUAL REVIEW
         elif score >= self.SIMILARITY_THRESHOLD_MEDIUM:
             return {
                 'confidence': 'MEDIUM',
                 'needs_review': True,
                 'is_match': False,  # Conservative: reject but flag for review
                 'reason': 'Score in uncertain range - manual review recommended'
-            }
-        
-        # Low-medium confidence: below medium threshold but above low
-        elif score >= self.SIMILARITY_THRESHOLD_LOW:
-            return {
-                'confidence': 'LOW_MEDIUM',
-                'needs_review': True,
-                'is_match': False,
-                'reason': 'Low similarity score - manual review recommended'
             }
         
         # Low confidence: clear rejection

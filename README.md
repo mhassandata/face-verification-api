@@ -39,7 +39,6 @@ The system now **intelligently selects the best similarity metric** for each ver
   - Cosine similarity (with quality boost)
   - Euclidean distance
   - Pearson correlation
-  - Weighted ensemble
 - **Automatically picks the highest score** as the final result
 - Shows which method was selected in the response
 

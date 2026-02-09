@@ -175,10 +175,10 @@ class FaceAnalysisService:
         # 2. InsightFace Pipeline (Detection -> Alignment -> Embedding)
         faces = self.app.get(img_processed)
 
-        # 2b. If no faces detected, try AGGRESSIVE fallback methods
+        # 2b. If no faces detected, try OPTIMIZED fallback methods
         if not faces:
             print(f"⚠️  No face detected in {image_label} with default settings")
-            print(f"   Trying 7 fallback methods for landscape/distant/unclear/rotated faces...")
+            print(f"   Trying 4 optimized fallback methods for landscape/unclear/rotated faces...")
             
             # Try 1: Original image without preprocessing
             print(f"   [1/7] Trying original image...")
@@ -196,15 +196,6 @@ class FaceAnalysisService:
                     detection_img = img_enhanced
                     print(f"   ✓ Face detected with contrast enhancement!")
             
-            # Try 3: Upscale for distant faces
-            if not faces:
-                print(f"   [3/7] Trying upscaling for distant faces...")
-                h, w = img.shape[:2]
-                img_upscaled = cv2.resize(img, (w*2, h*2), interpolation=cv2.INTER_CUBIC)
-                faces = self.app.get(img_upscaled)
-                if faces:
-                    detection_img = img_upscaled
-                    print(f"   ✓ Face detected after upscaling!")
             
             # Try 4: Lower detection threshold (more aggressive)
             if not faces:
@@ -217,44 +208,11 @@ class FaceAnalysisService:
                 # Restore original threshold
                 self.app.prepare(ctx_id=0, det_size=(640, 640), det_thresh=0.3)
             
-            # Try 5: Multiple detection sizes for landscape/distant faces
-            if not faces:
-                print(f"   [5/7] Trying multiple detection sizes...")
-                for det_size in [(320, 320), (480, 480), (800, 800)]:
-                    self.app.prepare(ctx_id=0, det_size=det_size, det_thresh=0.2)
-                    faces = self.app.get(img)
-                    if faces:
-                        detection_img = img
-                        print(f"   ✓ Face detected with size {det_size}!")
-                        break
-                # Restore original settings
-                self.app.prepare(ctx_id=0, det_size=(640, 640), det_thresh=0.3)
             
-            # Try 6: Aggressive CLAHE + upscaling for very unclear images
-            if not faces:
-                print(f"   [6/7] Trying aggressive enhancement + upscaling...")
-                lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)
-                l, a, b = cv2.split(lab)
-                clahe = cv2.createCLAHE(clipLimit=4.0, tileGridSize=(8, 8))
-                l = clahe.apply(l)
-                img_clahe = cv2.merge([l, a, b])
-                img_clahe = cv2.cvtColor(img_clahe, cv2.COLOR_LAB2BGR)
-                
-                # Upscale the enhanced image
-                h, w = img_clahe.shape[:2]
-                img_final = cv2.resize(img_clahe, (w*2, h*2), interpolation=cv2.INTER_CUBIC)
-                
-                self.app.prepare(ctx_id=0, det_size=(640, 640), det_thresh=0.15)
-                faces = self.app.get(img_final)
-                if faces:
-                    detection_img = img_final
-                    print(f"   ✓ Face detected with aggressive enhancement!")
-                # Restore original settings
-                self.app.prepare(ctx_id=0, det_size=(640, 640), det_thresh=0.3)
             
-            # Try 7: AUTO-ROTATION - Try all 4 orientations (CRITICAL for rotated CNIC/selfies)
+            # Try 4: AUTO-ROTATION - Try all 4 orientations (CRITICAL for rotated CNIC/selfies)
             if not faces:
-                print(f"   [7/7] Trying auto-rotation (0°, 90°, 180°, 270°) with UPSCALING...")
+                print(f"   [4/4] Trying auto-rotation (0°, 90°, 180°, 270°) with UPSCALING...")
                 print(f"        This handles CNIC images that are landscape/sideways...")
                 
                 # Define rotation angles and their names

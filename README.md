@@ -16,14 +16,11 @@ A production-ready face verification API optimized for CNIC (ID card) vs Selfie 
 
 ### 🔧 Advanced Detection
 - **🆕 Proactive Landscape Auto-Rotation**: Automatically detects and corrects landscape CNIC orientation BEFORE processing
-- **7-Layer Fallback System**: Handles challenging images with multiple detection strategies
+- **4-Layer Optimized Fallback System**: Handles challenging images with essential detection strategies
   1. Original image processing
   2. Aggressive contrast enhancement
-  3. 2x upscaling for distant faces
-  4. Lower detection threshold (0.15)
-  5. Multiple detection sizes (320/480/800)
-  6. CLAHE + upscaling for unclear images
-  7. **Auto-rotation** (0°, 90°, 180°, 270°) for rotated/landscape images
+  3. Lower detection threshold (0.15)
+  4. **Auto-rotation** (0°, 90°, 180°, 270°) for rotated/landscape images
 
 ### 📊 Smart Processing
 - **Conservative Preprocessing**: Balanced enhancement without embedding degradation

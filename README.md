@@ -35,7 +35,7 @@ A production-ready face verification API optimized for CNIC (ID card) vs Selfie 
 The system now **intelligently selects the best similarity metric** for each verification:
 
 **How it works:**
-- Calculates 4 different similarity scores:
+- Calculates 3 different similarity scores:
   - Cosine similarity (with quality boost)
   - Euclidean distance
   - Pearson correlation
@@ -55,7 +55,6 @@ The system now **intelligently selects the best similarity metric** for each ver
   "cosine_similarity": 0.241,
   "euclidean_similarity": 0.353,
   "pearson_similarity": 0.162,
-  "ensemble_score": 0.247
 }
 ```
 
@@ -65,7 +64,6 @@ The system now **intelligently selects the best similarity metric** for each ver
    Cosine:    0.241
    Euclidean: 0.353
    Pearson:   0.162
-   Ensemble:  0.247
 ✓ Selected: EUCLIDEAN (0.353) as final score
 ```
 
@@ -157,7 +155,6 @@ curl -X POST "http://localhost:8000/verify" \
   "cosine_similarity": 0.70,
   "euclidean_similarity": 0.71,
   "pearson_similarity": 0.69,
-  "ensemble_score": 0.72,
   "image_quality_1": {
     "quality_score": 0.85,
     "face_size": 246,

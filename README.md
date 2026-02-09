@@ -147,28 +147,39 @@ curl -X POST "http://localhost:8000/verify" \
 **Response**:
 ```json
 {
-  "similarity_score": 0.72,
+  "similarity_score": 0.7530237980165914,
   "is_match": true,
+  "threshold_used": 0.3,
+  "execution_time_ms": 12084.16,
   "confidence": "HIGH",
   "needs_manual_review": false,
-  "selected_method": "ensemble",
-  "cosine_similarity": 0.70,
-  "euclidean_similarity": 0.71,
-  "pearson_similarity": 0.69,
+  "review_reason": "High similarity score with good image quality",
+  "cosine_similarity": 0.7530237980165914,
+  "euclidean_similarity": 0.5027029514312744,
+  "quality_adjusted_score": 0.7530237980165914,
+  "pearson_similarity": 0.5064654350280762,
+  "selected_method": "cosine",
   "image_quality_1": {
-    "quality_score": 0.85,
-    "face_size": 246,
-    "detection_score": 0.84
+    "face_size": 247,
+    "face_area_ratio": 0.03686052933335304,
+    "detection_score": 0.8906886577606201,
+    "is_good_size": true,
+    "is_good_detection": true,
+    "quality_score": 0.5190653800964355
   },
   "image_quality_2": {
-    "quality_score": 0.65,
-    "face_size": 180,
-    "detection_score": 0.77
+    "face_size": 278,
+    "face_area_ratio": 0.028609663248062134,
+    "detection_score": 0.7806432247161865,
+    "is_good_size": true,
+    "is_good_detection": true,
+    "quality_score": 0.44754093885421753
   },
+  "average_quality": 0.48330315947532654,
   "faces_found_image_1": 1,
   "faces_found_image_2": 1,
-  "execution_time_ms": 1250.5,
-  "message": "CNIC and Selfie match verified. High confidence."
+  "message": "CNIC and Selfie match verified. High confidence.",
+  "review_path": null
 }
 ```
 

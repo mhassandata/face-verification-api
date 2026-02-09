@@ -11,6 +11,8 @@ A production-ready face verification API optimized for CNIC (ID card) vs Selfie 
 - **Quality Compensation**: Automatic boost for CNIC vs Selfie quality disparities (up to 60% boost)
 - **Baseline Enhancement**: 20% baseline boost for all comparisons
 
+### Raw Image → Detection Perception → Alignment Perception → Feature Perception → Similarity Perception → Decision
+
 ### 🔧 Advanced Detection
 - **🆕 Proactive Landscape Auto-Rotation**: Automatically detects and corrects landscape CNIC orientation BEFORE processing
 - **7-Layer Fallback System**: Handles challenging images with multiple detection strategies

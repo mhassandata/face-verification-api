@@ -16,10 +16,9 @@ class FaceVerificationResponse(BaseModel):
     # Multi-method verification scores
     cosine_similarity: Optional[float] = Field(None, description="Cosine similarity score")
     euclidean_similarity: Optional[float] = Field(None, description="Euclidean distance-based similarity")
-    ensemble_score: Optional[float] = Field(None, description="Weighted ensemble of multiple methods")
     quality_adjusted_score: Optional[float] = Field(None, description="Score adjusted for image quality")
     pearson_similarity: Optional[float] = Field(None, description="Pearson correlation coefficient")
-    selected_method: Optional[str] = Field(None, description="Which method was selected for final score (cosine/euclidean/pearson/ensemble)")
+    selected_method: Optional[str] = Field(None, description="Which method was selected for final score (cosine/euclidean/pearson)")
     
     # Quality metrics
     image_quality_1: Optional[Dict] = Field(None, description="Quality assessment for image 1")

@@ -557,22 +557,13 @@ class FaceAnalysisService:
         # 3. Pearson Correlation
         pearson_sim = self.calculate_pearson_similarity(emb1, emb2)
         
-        # 4. Ensemble Score (Weighted Average)
-        # We give higher weight to Cosine as it's the standard for ArcFace
-        # But we now include Pearson for robustness
-        # Old weights: Cosine 0.7, Euclidean 0.3
-        # New weights: Cosine 0.6, Euclidean 0.2, Pearson 0.2
-        ensemble = (cosine_sim * 0.6) + (euclidean_sim * 0.2) + (pearson_sim * 0.2)
-        ensemble = float(np.clip(ensemble, 0, 1))
-        
-        # 5. DYNAMIC SELECTION: Use the HIGHEST similarity score
+        # DYNAMIC SELECTION: Use the HIGHEST similarity score
         # This maximizes true positives by selecting the best-performing metric for each case
         # Some cases work better with cosine, others with euclidean, etc.
         scores = {
             'cosine': cosine_sim,
             'euclidean': euclidean_sim,
-            'pearson': pearson_sim,
-            'ensemble': ensemble
+            'pearson': pearson_sim
         }
         
         # Find the highest score and which method produced it
@@ -584,7 +575,6 @@ class FaceAnalysisService:
         print(f"     Cosine:    {cosine_sim:.3f}")
         print(f"     Euclidean: {euclidean_sim:.3f}")
         print(f"     Pearson:   {pearson_sim:.3f}")
-        print(f"     Ensemble:  {ensemble:.3f}")
         print(f"  ✓ Selected: {best_method.upper()} ({final_score:.3f}) as final score")
         
         # Quality adjusted score uses the final score
@@ -594,11 +584,10 @@ class FaceAnalysisService:
             'cosine_similarity': cosine_sim,
             'euclidean_similarity': euclidean_sim,
             'pearson_similarity': pearson_sim,
-            'ensemble_score': ensemble,
             'primary_score': final_score,  # ✅ Dynamically selected highest score
             'quality_adjusted_score': quality_adjusted,
             'avg_quality': (quality1['quality_score'] + quality2['quality_score']) / 2 if quality1 and quality2 else 0,
-            'selected_method': best_method  # NEW: Shows which method was used
+            'selected_method': best_method  # Shows which method was used
         }
 
     def determine_confidence_level(self, score: float, quality1: dict, quality2: dict) -> dict:

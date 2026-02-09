@@ -73,7 +73,6 @@ async def verify_faces(
             cosine_similarity=0,
             euclidean_similarity=0,
             pearson_similarity=0,
-            ensemble_score=0,
             quality_adjusted_score=0,
             image_quality_1=None,
             image_quality_2=None,
@@ -112,7 +111,6 @@ async def verify_faces(
             cosine_similarity=0,
             euclidean_similarity=0,
             pearson_similarity=0,
-            ensemble_score=0,
             quality_adjusted_score=0,
             image_quality_1=quality1,
             image_quality_2=quality2,
@@ -189,7 +187,6 @@ async def verify_faces(
         cosine_similarity=verification_scores['cosine_similarity'],
         euclidean_similarity=verification_scores['euclidean_similarity'],
         pearson_similarity=verification_scores['pearson_similarity'],
-        ensemble_score=verification_scores['ensemble_score'],
         quality_adjusted_score=verification_scores['quality_adjusted_score'],
         selected_method=verification_scores.get('selected_method', 'unknown'),
         
